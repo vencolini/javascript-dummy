@@ -1,1 +1,1 @@
-#Dummy github graph generation. Just for fun
+Dummy github graph generation. Just for fun
