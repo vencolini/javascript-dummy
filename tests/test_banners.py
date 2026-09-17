@@ -162,6 +162,21 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(paint(self.repo, self.config, brighter), len(brighter['years'][0]['due_pixels']))
         self.assertEqual(paint(self.repo, self.config, brighter), 0)
 
+    def test_fresh_snapshot_preview_does_not_amplify_existing_art(self):
+        plan = make_plan(self.config, date(2024, 2, 1))
+        paint(self.repo, self.config, plan)
+        config_path = Path(self.tmp.name) / 'config.json'
+        config_path.write_text(json.dumps(self.config))
+        activity_path = Path(self.tmp.name) / 'activity.json'
+        activity_path.write_text(json.dumps({d: 2 for d in plan['years'][0]['due_pixels']}))
+        output = Path(self.tmp.name) / 'preview'
+        self.assertEqual(main(['preview', '--repo', str(self.repo), '--config', str(config_path),
+                              '--activity', str(activity_path), '--output', str(output),
+                              '--as-of', '2024-02-01']), 0)
+        preview = json.loads((output / 'plan.json').read_text())
+        self.assertEqual(preview['years'][0]['commits_per_pixel'], 2)
+        self.assertEqual(preview['total_commits'], plan['total_commits'])
+
     def test_migration_preserves_code_and_source_with_verified_backup(self):
         (self.repo / 'script.js').write_text("console.log('test');\n// Commit on 2024-01-01T12:00:00\n")
         self.commit('Dummy commit on 2024-01-01T12:00:00')

@@ -33,17 +33,16 @@ def main(argv=None):
         config = json.loads(args.config.read_text())
         activity = load_activity(args.activity)
         removed = legacy_counts(args.subtract_legacy) if args.subtract_legacy else {}
+        # A fresh snapshot includes our existing art. Remove it for both preview
+        # and apply so the two actions agree and never amplify their own counts.
+        if activity and (args.repo / '.banner' / 'state.json').is_file():
+            from history import ART, git
+            for line in git(args.repo, 'log', '--format=%s').splitlines():
+                match = ART.fullmatch(line)
+                if match:
+                    removed[match[1]] = removed.get(match[1], 0) + 1
         plan = make_plan(config, args.as_of, activity, removed)
         if args.action == 'apply':
-            # Subtract existing art from a fresh activity snapshot before recalibrating,
-            # otherwise each run would inflate its own intensity.
-            if activity:
-                from history import ART, git
-                for line in git(args.repo, 'log', '--format=%s').splitlines():
-                    match = ART.fullmatch(line)
-                    if match:
-                        removed[match[1]] = removed.get(match[1], 0) + 1
-                plan = make_plan(config, args.as_of, activity, removed)
             added = paint(args.repo, config, plan, args.max_commits)
             print(f'Added {added:,} contribution-art commits locally. Nothing was pushed.')
         else:

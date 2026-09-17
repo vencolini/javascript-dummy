@@ -88,7 +88,7 @@ python3 generate_dummy_commits.py preview \
 
 Snapshots stay in ignored `.local/` files. They contain aggregate daily totals, not
 private repository names. Once the old history is replaced on GitHub, fetch a new
-snapshot and omit `--subtract-legacy`. Apply subtracts existing art from a fresh
+snapshot and omit `--subtract-legacy`. Both preview and apply subtract existing art from a fresh
 snapshot before recalibrating, preventing intensity from growing on every run.
 
 ## Replace the old generator's history
@@ -129,6 +129,17 @@ remote hash from the migration report to protect against overwriting new remote 
 git -C .local/replacement push \
   --force-with-lease=refs/heads/main:PREVIOUS_REMOTE_MAIN_HASH origin main:main
 ```
+
+**Large imports:** in this repository's initial publication, GitHub indexed only
+the latest 1,000 commits from a single large update. Publishing the same history
+in batches of 900 made the earlier years appear. For a large replacement, start
+at the last preserved code commit and advance the default branch through the art
+history in batches of at most 900 commits, finishing at the prepared HEAD. Use
+an exact force-with-lease for the initial replacement, then fast-forward updates;
+keep at least 12 seconds between updates. GitHub's reference-update API can advance
+through objects already uploaded. Keep the verified backup until all years match
+the preview. The ordinary push above is suitable for small updates; a large import
+needs batching and verification.
 
 Do **not** merge the old branch back into the new one: that would restore the random
 contributions. Do not push the original history to `gh-pages`, which can also count
