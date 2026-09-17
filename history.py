@@ -14,11 +14,11 @@ LEGACY = re.compile(r'^Dummy commit on \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$')
 ART = re.compile(r'^Contribution art: (\d{4}-\d{2}-\d{2}) #(\d+) \[([a-f0-9]{64})\]$')
 
 
-def git(repo, *args, env=None):
+def git(repo, *args, env=None, strip=True):
     result = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, text=True, env=env)
     if result.returncode:
         raise ValueError(f'git {args[0]}: {result.stderr.strip()}')
-    return result.stdout.strip()
+    return result.stdout.strip() if strip else result.stdout
 
 
 def identity(config):
@@ -140,12 +140,10 @@ def prepare_replacement(source, destination):
             if not set(changed) <= {'index.html', 'script.js', 'styles.css'}:
                 raise ValueError(f'{oid}: a dummy-labelled commit touches unexpected files; inspect manually.')
             if parents:
-                diff = git(source, 'diff', '--unified=0', parents[0], oid, '--', *changed)
-                for line in diff.splitlines():
-                    if line.startswith(('+++', '---')):
-                        continue
-                    if line.startswith('-') or (line.startswith('+') and line[1:].strip()
-                                               and line[1:].strip() != '// Commit on ' + subject[16:]):
+                for filename in changed:
+                    before = git(source, 'show', f'{parents[0]}:{filename}', strip=False)
+                    after = git(source, 'show', f'{oid}:{filename}', strip=False)
+                    if after != before + '\n// Commit on ' + subject[16:] + '\n':
                         raise ValueError(f'{oid}: dummy-labelled commit contains non-generator changes.')
             removed.append(oid)
         elif ART.fullmatch(subject):

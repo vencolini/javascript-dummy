@@ -102,6 +102,7 @@ class HistoryTests(unittest.TestCase):
         git(self.repo, 'config', 'user.email', 'test@example.com')
         git(self.repo, 'config', 'commit.gpgsign', 'false')
         (self.repo / 'README.md').write_text('Test project\n')
+        (self.repo / 'script.js').write_text("console.log('test');")
         self.commit('Initial project')
         self.config = dict(author=dict(name='Test User', email='test@example.com'),
                            commits_per_pixel=2, years=[dict(year=2024, text='I', align='left')])
@@ -162,7 +163,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(paint(self.repo, self.config, brighter), 0)
 
     def test_migration_preserves_code_and_source_with_verified_backup(self):
-        (self.repo / 'script.js').write_text('// Commit on 2024-01-01T12:00:00\n')
+        (self.repo / 'script.js').write_text("console.log('test');\n// Commit on 2024-01-01T12:00:00\n")
         self.commit('Dummy commit on 2024-01-01T12:00:00')
         (self.repo / 'README.md').write_text('Improved project\n')
         self.commit('Real code update')
