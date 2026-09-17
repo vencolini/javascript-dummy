@@ -1,109 +1,64 @@
-import os
-import subprocess
-import random
-from datetime import datetime, timedelta
+#!/usr/bin/env python3
+"""Turn contribution calendars into banners. Default action is a read-only preview."""
 
-from dotenv import load_dotenv
+import argparse
+import json
+import sys
+from datetime import date, datetime, timezone
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+from banner import load_activity, make_plan, write_preview
+from history import legacy_counts, paint, prepare_replacement
 
-# Configuration Variables
-PROJECT_NAME = "JavaScript-Project"  # Name of the project directory
-START_DAYS_AGO = 1095  # 3 years 1095 days # How far back to start (in days) 
-MAX_COMMITS_PER_DAY = 10
 
-# Fetch GitHub details from environment variables
-GITHUB_NAME = os.getenv("GITHUB_NAME")
-GITHUB_EMAIL = os.getenv("GITHUB_EMAIL")
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', nargs='?', choices=('preview', 'apply', 'prepare'), default='preview')
+    parser.add_argument('--config', type=Path, default=Path(__file__).with_name('banners.json'))
+    parser.add_argument('--as-of', type=date.fromisoformat, default=datetime.now(timezone.utc).date())
+    parser.add_argument('--activity', type=Path, help='JSON snapshot of daily GitHub counts')
+    parser.add_argument('--subtract-legacy', type=Path, help='Old repository whose dummy counts should be subtracted from the snapshot')
+    parser.add_argument('--output', type=Path, default=Path('preview'), help='Preview output directory')
+    parser.add_argument('--repo', type=Path, default=Path('.'), help='Local repository to apply to / prepare from')
+    parser.add_argument('--destination', type=Path, help='New local repository for prepare (must not exist)')
+    parser.add_argument('--max-commits', type=int, default=200000)
+    args = parser.parse_args(argv)
+    try:
+        if args.action == 'prepare':
+            if args.destination is None:
+                raise ValueError('prepare requires --destination pointing to a new directory')
+            report = prepare_replacement(args.repo, args.destination)
+            print(json.dumps(report, indent=2))
+            return 0
+        config = json.loads(args.config.read_text())
+        activity = load_activity(args.activity)
+        removed = legacy_counts(args.subtract_legacy) if args.subtract_legacy else {}
+        plan = make_plan(config, args.as_of, activity, removed)
+        if args.action == 'apply':
+            # Subtract existing art from a fresh activity snapshot before recalibrating,
+            # otherwise each run would inflate its own intensity.
+            if activity:
+                from history import ART, git
+                for line in git(args.repo, 'log', '--format=%s').splitlines():
+                    match = ART.fullmatch(line)
+                    if match:
+                        removed[match[1]] = removed.get(match[1], 0) + 1
+                plan = make_plan(config, args.as_of, activity, removed)
+            added = paint(args.repo, config, plan, args.max_commits)
+            print(f'Added {added:,} contribution-art commits locally. Nothing was pushed.')
+        else:
+            write_preview(plan, args.output)
+            print(f'Preview: {(args.output / "index.html").resolve()}')
+        for year in plan['years']:
+            print(f'{year["year"]}  {year["text"]:12}  {year["width"]:2} weeks  '
+                  f'{year["first_pixel"]} → {year["last_pixel"]}  '
+                  f'{len(year["pending_pixels"]):3} future pixels  '
+                  f'{year["commits_per_pixel"]} commits/pixel')
+        return 0
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        print(f'Error: {exc}', file=sys.stderr)
+        return 1
 
-if not GITHUB_NAME or not GITHUB_EMAIL:
-    raise ValueError("Please set the GITHUB_NAME and GITHUB_EMAIL environment variables.")
 
-FILE_CHANGES = [
-    ("index.html", "<!DOCTYPE html>\n<html>\n<head>\n    <title>Dummy Project</title>\n    <link rel='stylesheet' href='styles.css'>\n</head>\n<body>\n    <h1>Hello World</h1>\n    <script src='script.js'></script>\n</body>\n</html>"),
-    ("styles.css", "body { font-family: Arial, sans-serif; }\nh1 { color: #333; }"),
-    ("script.js", "console.log('Hello World');")
-]
-
-def run_command(cmd, cwd=None):
-    """Run a shell command."""
-    result = subprocess.run(cmd, shell=True, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        print(f"Error running command: {cmd}\n{result.stderr.decode()}")
-    return result.stdout.decode()
-
-def initialize_git(repo_path):
-    """Initialize a git repository."""
-    run_command("git init", cwd=repo_path)
-    run_command(f"git config user.name \"{GITHUB_NAME}\"", cwd=repo_path)
-    run_command(f"git config user.email \"{GITHUB_EMAIL}\"", cwd=repo_path)
-
-def create_files(repo_path):
-    """Create initial project files."""
-    for filename, content in FILE_CHANGES:
-        with open(os.path.join(repo_path, filename), 'w') as f:
-            f.write(content)
-
-def make_commit(repo_path, commit_date):
-    """Make a dummy commit with a specific date."""
-    # Modify a file slightly to ensure Git detects a change
-    filename, _ = random.choice(FILE_CHANGES)
-    file_path = os.path.join(repo_path, filename)
-    with open(file_path, 'a') as f:
-        f.write(f"\n// Commit on {commit_date}\n")
-    
-    run_command("git add .", cwd=repo_path)
-    
-    env = os.environ.copy()
-    env['GIT_AUTHOR_DATE'] = commit_date
-    env['GIT_COMMITTER_DATE'] = commit_date
-    
-    commit_message = f"Dummy commit on {commit_date}"
-    subprocess.run(f'git commit -m "{commit_message}" --date "{commit_date}"', shell=True, cwd=repo_path, env=env)
-
-def generate_commits(repo_path, start_date):
-    """Generate commits from start_date to today."""
-    today = datetime.today()
-    current_date = start_date
-    while current_date <= today:
-        # Decide randomly whether to have commits on this day
-        if random.choice([True, False, True]):  # More likely to have commits
-            num_commits = random.randint(1, MAX_COMMITS_PER_DAY)
-            for _ in range(num_commits):
-                # Randomize the time within the day
-                commit_time = current_date + timedelta(
-                    hours=random.randint(0, 23),
-                    minutes=random.randint(0, 59),
-                    seconds=random.randint(0, 59)
-                )
-                commit_date = commit_time.strftime('%Y-%m-%dT%H:%M:%S')
-                make_commit(repo_path, commit_date)
-        # Move to next day
-        current_date += timedelta(days=1)
-
-def main():
-    # Define the project path
-    current_dir = os.getcwd()
-    repo_path = os.path.join(current_dir, PROJECT_NAME)
-    
-    # Create project directory
-    os.makedirs(repo_path, exist_ok=True)
-    
-    # Initialize Git
-    initialize_git(repo_path)
-    
-    # Create initial files and initial commit
-    create_files(repo_path)
-    initial_commit_date = (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%dT12:00:00')
-    make_commit(repo_path, initial_commit_date)
-    
-    # Generate backdated commits
-    start_date = datetime.today() - timedelta(days=START_DAYS_AGO)
-    generate_commits(repo_path, start_date)
-    
-    print(f"Dummy project created at {repo_path}")
-    print("You can now navigate to the project directory and push it to GitHub.")
-
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    sys.exit(main())

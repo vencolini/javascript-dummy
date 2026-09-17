@@ -1,0 +1,23 @@
+{
+  "author": {
+    "name": "vencolini",
+    "email": "4957612+vencolini@users.noreply.github.com"
+  },
+  "commits_per_pixel": 30,
+  "years": [
+    {"year": 2026, "text": "AI AGENTS", "font": "compact", "align": "left"},
+    {"year": 2025, "text": "SENIOR"},
+    {"year": 2024, "text": "SOFTWARE"},
+    {"year": 2023, "text": "ENGINEER"},
+    {"year": 2022, "text": "AI ENGINEER", "font": "compact"},
+    {"year": 2021, "text": "TYPESCRIPT", "font": "compact"},
+    {"year": 2020, "text": "JAVASCRIPT", "font": "compact"},
+    {"year": 2019, "text": "FULL STACK", "font": "compact"},
+    {"year": 2018, "text": "NODE JS"},
+    {"year": 2017, "text": "REACT"},
+    {"year": 2016, "text": "NEXT JS"},
+    {"year": 2015, "text": "BACKEND"},
+    {"year": 2014, "text": "APIS"},
+    {"year": 2013, "text": "CODE", "start_date": "2013-07-07"}
+  ]
+}
